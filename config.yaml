@@ -1,0 +1,33 @@
+profiles:
+  home:
+    monitors:
+    - resolution: 3840x2160
+      position: primary
+    - resolution: 2560x1440
+      position: left
+    - resolution: 2056x1329
+      position: builtin
+    layout:
+      main_screen_quadrants:
+        top_left: com.google.Chrome
+        top_right: com.microsoft.teams2
+        bottom_left: com.microsoft.Outlook
+        bottom_right: com.kakao.KakaoTalkMac
+      macbook_screen:
+      - md.obsidian
+  office:
+    monitors:
+    - resolution: 3440x1440
+      position: primary
+    - resolution: 2560x1440
+      position: left
+    - resolution: macbook
+      position: builtin
+    layout:
+      main_screen_quadrants:
+        top_left: com.google.Chrome
+        top_right: com.microsoft.teams2
+        bottom_left: com.microsoft.Outlook
+        bottom_right: com.kakao.KakaoTalkMac
+      macbook_screen:
+      - md.obsidian

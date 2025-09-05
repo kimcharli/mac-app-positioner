@@ -1,0 +1,17 @@
+[project]
+name = "mac-app-positioner"
+version = "0.1.0"
+description = "A utility for positioning macOS applications across monitors"
+authors = [{name = "Chang Hyun Kim", email = "kimcharli@gmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyautogui>=0.9.54",
+    "pymonctl>=0.92",
+    "PyObjC>=9.0",
+    "PyYAML>=6.0",
+]
+
+[tool.uv]
+dev-dependencies = []
