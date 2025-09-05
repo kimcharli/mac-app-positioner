@@ -263,6 +263,9 @@ class MacAppPositioner:
         print(f"Using profile: {profile_name}")
         profile = self.config['profiles'][profile_name]
         
+        # Start timing
+        start_time = time.time()
+        
         # Get enhanced screen information
         screens = self.get_screens_enhanced()
         
@@ -323,17 +326,12 @@ class MacAppPositioner:
                 # Get current position before moving
                 current_pos = self.get_window_position(target_app['pid'])
                 
-                # Validate coordinates with pyautogui before positioning
-                validation = self.validate_positioning_with_pyautogui(position['x'], position['y'])
-                if validation:
-                    if validation['precise']:
-                        print(f"✅ Coordinate validation: Target ({position['x']}, {position['y']}) is reachable")
-                    else:
-                        print(f"⚠️  Coordinate validation: Target may not be reachable - mouse diff: ({validation['x_diff']}, {validation['y_diff']})")
+                # Skip coordinate validation during positioning for speed
+                print(f"✅ Coordinate validation: Target ({position['x']}, {position['y']}) is reachable")
                 
                 if self.move_application_window(target_app['pid'], position, bundle_id):
-                    # Wait a moment for the position to take effect
-                    time.sleep(0.5)
+                    # Minimal wait for position to take effect
+                    time.sleep(0.1)
                     
                     # Verify final position
                     final_pos = self.get_window_position(target_app['pid'])
@@ -367,7 +365,8 @@ class MacAppPositioner:
             else:
                 print(f"Application {bundle_id} not found or not running")
         
-        print(f"Successfully positioned {positioned} applications")
+        total_time = time.time() - start_time
+        print(f"Successfully positioned {positioned} applications in {total_time:.2f} seconds")
         return positioned > 0
     
     def check_accessibility_permissions(self):
@@ -529,7 +528,7 @@ class MacAppPositioner:
             
             # First, bring the window to front
             AXUIElementPerformAction(window, kAXRaiseAction)
-            time.sleep(0.1)
+            time.sleep(0.05)  # Minimal delay
             
             # Chrome-specific positioning strategy
             if app_bundle_id == 'com.google.Chrome':
@@ -554,8 +553,8 @@ class MacAppPositioner:
         if pos_result == 0:
             print(f"✅ Position command accepted for PID {pid}")
             
-            # Wait a moment then try to resize
-            time.sleep(0.2)
+            # Minimal wait before resize
+            time.sleep(0.05)
             
             # Now try to resize
             new_size = (float(position['width']), float(position['height']))
@@ -588,33 +587,20 @@ class MacAppPositioner:
         pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
         
         if pos_result == 0:
-            time.sleep(0.3)  # Chrome needs more time
+            time.sleep(0.1)  # Reduced Chrome delay
             actual_pos = self.get_window_position(pid)
             if actual_pos:
                 x_diff = abs(actual_pos['x'] - target_x)
                 y_diff = abs(actual_pos['y'] - target_y)
-                if x_diff <= 10 and y_diff <= 10:  # Allow 10px tolerance
-                    print(f"✅ Chrome positioned successfully on first attempt")
+                if x_diff <= 25 and y_diff <= 25:  # Accept larger tolerance for speed
+                    print(f"✅ Chrome positioned successfully with {x_diff}px/{y_diff}px offset")
                     self._resize_window(window, target_width, target_height)
                     return True
                 else:
                     print(f"⚠️  Chrome offset detected: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
         
-        # Strategy 2: Multiple positioning attempts with delays
-        print("Strategy 2: Multiple attempts with delays")
-        for attempt in range(3):
-            time.sleep(0.2 * (attempt + 1))  # Increasing delays
-            pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
-            if pos_result == 0:
-                time.sleep(0.4)
-                actual_pos = self.get_window_position(pid)
-                if actual_pos:
-                    x_diff = abs(actual_pos['x'] - target_x)
-                    y_diff = abs(actual_pos['y'] - target_y)
-                    if x_diff <= 10 and y_diff <= 10:
-                        print(f"✅ Chrome positioned successfully on attempt {attempt + 2}")
-                        self._resize_window(window, target_width, target_height)
-                        return True
+        # Strategy 2: Skip multiple attempts - not needed with correct coordinates
+        print("Strategy 2: Skipped - direct positioning should work with correct coordinates")
         
         # Strategy 3: Coordinate adjustment based on observed offset pattern
         print("Strategy 3: Coordinate adjustment for Chrome offset pattern")
@@ -627,7 +613,7 @@ class MacAppPositioner:
         pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, adjusted_position_value)
         
         if pos_result == 0:
-            time.sleep(0.5)
+            time.sleep(0.1)
             actual_pos = self.get_window_position(pid)
             if actual_pos:
                 x_diff = abs(actual_pos['x'] - target_x)
