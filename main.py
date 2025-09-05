@@ -70,26 +70,96 @@ class MacAppPositioner:
             sys.exit(1)
     
     def load_coordinate_mappings(self):
-        """Load coordinate mappings for monitor positioning"""
-        # Default coordinate mappings based on our discoveries
-        return {
-            'SAMSUNG_3': {  # 4K monitor - coordinates depend on which display is main
-                'arrangement': (0, 1329),      # When MacBook is main
-                'positioning': (0, -2160),     # When MacBook is main (above MacBook)
-                'positioning_when_main': (0, 0),  # When Samsung is main (at origin)
-                'translation_rule': 'adaptive_based_on_main_display'
-            },
-            'Built-in Retina Display_1': {  # MacBook built-in
-                'arrangement': (0, 0),
-                'positioning': (0, 0),
-                'translation_rule': 'primary'
-            },
-            'LEN P24h-20_2': {  # Left monitor
-                'arrangement': (-2560, 969),
-                'positioning': (-2560, 969),
-                'translation_rule': 'left_of_primary'
-            }
-        }
+        """Load coordinate mappings for monitor positioning - now dynamic"""
+        # Generate coordinate mappings dynamically based on detected monitors
+        return self.generate_dynamic_coordinate_mappings()
+    
+    def generate_dynamic_coordinate_mappings(self):
+        """Generate coordinate mappings dynamically based on currently connected monitors"""
+        try:
+            # Get current monitor information using NSScreen (always available)
+            from Cocoa import NSScreen
+            screens = NSScreen.screens()
+            mappings = {}
+            main_screen = NSScreen.mainScreen()
+            main_frame = main_screen.frame()
+            main_height = int(main_frame.size.height)
+            
+            for i, screen in enumerate(screens):
+                frame = screen.frame()
+                # NSScreen coordinates (Cocoa - bottom-left origin)
+                cocoa_x, cocoa_y = int(frame.origin.x), int(frame.origin.y)
+                width, height = int(frame.size.width), int(frame.size.height)
+                is_main = screen == main_screen
+                
+                # Convert to Quartz coordinates (top-left origin) for window positioning
+                if is_main:
+                    # Main screen is always at origin in both coordinate systems
+                    quartz_x, quartz_y = 0, 0
+                else:
+                    # Keep X coordinate the same
+                    quartz_x = cocoa_x
+                    
+                    # Convert Y coordinate: Cocoa bottom-left -> Quartz top-left
+                    # If cocoa_y > 0: monitor is below main in Cocoa = above main in Quartz (negative Y)
+                    # If cocoa_y == main_height: monitor directly below main = at main's bottom edge  
+                    if cocoa_y > 0:
+                        # Monitor is below main display in Cocoa = above main in Quartz
+                        quartz_y = -height  # Position above main display
+                    elif cocoa_y < 0:
+                        # Monitor is above main display in Cocoa = below main in Quartz  
+                        quartz_y = main_height
+                    else:
+                        # Same Y as main display
+                        quartz_y = 0
+                
+                # Determine translation rule based on Quartz coordinates
+                if is_main:
+                    translation_rule = 'primary'
+                elif quartz_y < 0:
+                    translation_rule = 'above_primary'
+                elif quartz_y > 0:
+                    translation_rule = 'below_primary'
+                elif quartz_x < 0:
+                    translation_rule = 'left_of_primary'
+                elif quartz_x > 0:
+                    translation_rule = 'right_of_primary'
+                else:
+                    translation_rule = 'overlapping_primary'
+                
+                # Generate a unique monitor name based on resolution and position
+                monitor_name = self.generate_monitor_name(width, height, quartz_x, quartz_y, i, is_main)
+                
+                mappings[monitor_name] = {
+                    'arrangement': (cocoa_x, cocoa_y),      # NSScreen coordinates for reference
+                    'positioning': (quartz_x, quartz_y),    # Quartz coordinates for window positioning
+                    'translation_rule': translation_rule,
+                    'resolution': f'{width}x{height}',
+                    'is_main': is_main,
+                    'coordinate_source': 'cocoa_to_quartz_conversion'
+                }
+            
+            return mappings
+            
+        except Exception as e:
+            print(f"Error generating dynamic coordinate mappings: {e}")
+            # Fallback to empty mappings - will use raw coordinates
+            return {}
+    
+    def generate_monitor_name(self, width, height, x, y, index, is_main):
+        """Generate a consistent monitor name based on characteristics"""
+        # Try to identify monitor type by resolution
+        if width == 2056 and height == 1329:
+            return 'Built-in Retina Display_1'
+        elif width == 3840 and height == 2160:
+            return f'4K_Display_{index}'
+        elif width == 2560 and height == 1440:
+            return f'QHD_Display_{index}'
+        elif width == 3440 and height == 1440:
+            return f'UltraWide_Display_{index}'
+        else:
+            # Generic naming for unknown resolutions
+            return f'Display_{width}x{height}_{index}'
     
     def get_screens_enhanced(self):
         """Enhanced monitor detection using hybrid approach"""
@@ -108,36 +178,34 @@ class MacAppPositioner:
             for i, monitor in enumerate(monitors):
                 pos = monitor.position
                 size = monitor.size
+                is_main = hasattr(monitor, 'isPrimary') and monitor.isPrimary
+                
+                # Generate consistent monitor name for lookup
+                monitor_name = self.generate_monitor_name(size.width, size.height, pos.x, pos.y, i, is_main)
                 
                 # Enhanced information from pymonctl
                 monitor_info = {
                     'index': i,
-                    'name': monitor.name,
+                    'name': monitor_name,  # Use our consistent naming
+                    'original_name': monitor.name,  # Keep original pymonctl name for reference
                     'width': size.width,
                     'height': size.height,
                     'x': pos.x,
                     'y': pos.y,
-                    'is_main': hasattr(monitor, 'isPrimary') and monitor.isPrimary,
+                    'is_main': is_main,
                     'work_area': getattr(monitor, 'workArea', None),
                     'source': 'pymonctl'
                 }
                 
-                # Add coordinate translation if available
-                if monitor.name in self.coordinate_mappings:
-                    mapping = self.coordinate_mappings[monitor.name]
-                    
-                    # Use appropriate coordinates based on whether this monitor is main
-                    is_main = hasattr(monitor, 'isPrimary') and monitor.isPrimary
-                    if is_main and 'positioning_when_main' in mapping:
-                        monitor_info['positioning_coords'] = mapping['positioning_when_main']
-                        monitor_info['translation_rule'] = f"{mapping['translation_rule']}_as_main"
-                    else:
-                        monitor_info['positioning_coords'] = mapping['positioning']
-                        monitor_info['translation_rule'] = mapping['translation_rule']
+                # Add coordinate translation using dynamic mappings
+                if monitor_name in self.coordinate_mappings:
+                    mapping = self.coordinate_mappings[monitor_name]
+                    monitor_info['positioning_coords'] = mapping['positioning']
+                    monitor_info['translation_rule'] = mapping['translation_rule']
                 else:
-                    # Default: same as arrangement coordinates
+                    # Fallback: same as arrangement coordinates
                     monitor_info['positioning_coords'] = (pos.x, pos.y)
-                    monitor_info['translation_rule'] = 'unknown'
+                    monitor_info['translation_rule'] = 'dynamic_fallback'
                 
                 screen_info.append(monitor_info)
             
@@ -155,16 +223,23 @@ class MacAppPositioner:
         
         for i, screen in enumerate(screens):
             frame = screen.frame()
+            x, y = int(frame.origin.x), int(frame.origin.y)
+            width, height = int(frame.size.width), int(frame.size.height)
+            is_main = screen == NSScreen.mainScreen()
+            
+            # Generate consistent monitor name
+            monitor_name = self.generate_monitor_name(width, height, x, y, i, is_main)
+            
             screen_info.append({
                 'index': i,
-                'name': f'Screen_{i}',  # NSScreen doesn't provide names
-                'width': int(frame.size.width),
-                'height': int(frame.size.height),
-                'x': int(frame.origin.x),
-                'y': int(frame.origin.y),
-                'is_main': screen == NSScreen.mainScreen(),
-                'positioning_coords': (int(frame.origin.x), int(frame.origin.y)),  # Assume same as arrangement
-                'translation_rule': 'nsscreen_fallback',
+                'name': monitor_name,
+                'width': width,
+                'height': height,
+                'x': x,
+                'y': y,
+                'is_main': is_main,
+                'positioning_coords': (x, y),  # Use same coordinates
+                'translation_rule': 'nsscreen_dynamic',
                 'source': 'nsscreen'
             })
         
@@ -327,8 +402,8 @@ class MacAppPositioner:
         # Get running applications
         running_apps = self.get_running_applications()
         
-        # Position applications
-        layout = profile['layout']['main_screen_quadrants']
+        # Position applications using common layout
+        layout = self.config['layout']['primary']
         positioned = 0
         
         for quadrant, bundle_id in layout.items():
@@ -840,14 +915,7 @@ class MacAppPositioner:
         for monitor in config_monitors:
             print(f"    - resolution: \"{monitor['resolution']}\"")
             print(f"      position: \"{monitor['position']}\"")
-        print("  layout:")
-        print("    main_screen_quadrants:")
-        print("      top_left: \"com.google.Chrome\"")
-        print("      top_right: \"com.microsoft.teams2\"")
-        print("      bottom_left: \"com.microsoft.Outlook\"")
-        print("      bottom_right: \"com.kakao.KakaoTalkPC\"")
-        print("    macbook_screen:")
-        print("      - \"md.obsidian\"")
+        print("\n# Layout is defined at top level and shared across profiles")
         print("=" * 40)
         
         return config_monitors
@@ -907,21 +975,12 @@ class MacAppPositioner:
         
         # Update config
         if profile_name not in self.config['profiles']:
-            # Create new profile with default layout
+            # Create new profile (layout is defined at top level)
             self.config['profiles'][profile_name] = {
-                'monitors': config_monitors,
-                'layout': {
-                    'main_screen_quadrants': {
-                        'top_left': 'com.google.Chrome',
-                        'top_right': 'com.microsoft.teams2',
-                        'bottom_left': 'com.microsoft.Outlook',
-                        'bottom_right': 'com.kakao.KakaoTalkPC'
-                    },
-                    'macbook_screen': ['md.obsidian']
-                }
+                'monitors': config_monitors
             }
         else:
-            # Update monitors only, keep existing layout
+            # Update monitors only (layout is at top level)
             self.config['profiles'][profile_name]['monitors'] = config_monitors
         
         # Save to file

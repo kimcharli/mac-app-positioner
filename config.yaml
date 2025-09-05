@@ -1,3 +1,14 @@
+# Common layout - applies to all profiles
+layout:
+  primary:
+    top_left: com.google.Chrome
+    top_right: com.microsoft.teams2
+    bottom_left: com.microsoft.Outlook
+    bottom_right: com.kakao.KakaoTalkMac
+  builtin:
+  - md.obsidian
+
+# Monitor configurations for different setups
 profiles:
   home:
     monitors:
@@ -7,14 +18,6 @@ profiles:
       position: left
     - resolution: 2056x1329
       position: builtin
-    layout:
-      main_screen_quadrants:
-        top_left: com.google.Chrome
-        top_right: com.microsoft.teams2
-        bottom_left: com.microsoft.Outlook
-        bottom_right: com.kakao.KakaoTalkMac
-      macbook_screen:
-      - md.obsidian
   office:
     monitors:
     - resolution: 3440x1440
@@ -23,11 +26,3 @@ profiles:
       position: left
     - resolution: macbook
       position: builtin
-    layout:
-      main_screen_quadrants:
-        top_left: com.google.Chrome
-        top_right: com.microsoft.teams2
-        bottom_left: com.microsoft.Outlook
-        bottom_right: com.kakao.KakaoTalkMac
-      macbook_screen:
-      - md.obsidian

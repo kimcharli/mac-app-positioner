@@ -81,12 +81,12 @@ profiles:
       - resolution: "2056x1329"
         position: builtin
     layout:
-      main_screen_quadrants:
+      primary:
         top_left: com.google.Chrome
         top_right: com.microsoft.teams2
         bottom_left: com.microsoft.Outlook
         bottom_right: com.kakao.KakaoTalkMac
-      macbook_screen:
+      builtin:
         - md.obsidian
   office:
     # ... another profile for your office setup
@@ -107,9 +107,9 @@ Under each profile, the `monitors` list describes the monitor setup for that pro
 
 The `layout` section defines where each application should go.
 
-*   **`main_screen_quadrants`**: This is for the monitor you marked as `primary`.
+*   **`primary`**: This is for the monitor you marked as `primary`.
     *   `top_left`, `top_right`, `bottom_left`, `bottom_right`: Assign an application's **bundle identifier** to each quadrant.
-*   **`macbook_screen`**: You can define layouts for other screens as well.
+*   **`builtin`**: You can define layouts for other screens as well.
 
 ### How to Find Bundle Identifiers
 
