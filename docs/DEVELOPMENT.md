@@ -49,6 +49,56 @@ This project uses `uv` for Python environment and dependency management.
 -   **Prioritize a Working Solution:** The focus is on creating a reliable tool that solves the core problem, even if it means hardcoding some solutions (like the coordinate mappings) that are discovered through empirical testing.
 -   **Document Everything:** The challenges with macOS coordinate systems were significant. All findings are documented to prevent repeating the same debugging cycles.
 
+## Debugging Multi-Monitor Issues
+
+When developing or troubleshooting multi-monitor positioning issues, the following debugging approaches are useful:
+
+### Monitor Detection Libraries
+
+The application uses two main libraries for monitor detection:
+
+- **`pymonctl`**: Provides detailed monitor information including names, work areas, and positioning coordinates
+- **`pyautogui`**: Offers basic screen size detection and coordinate validation
+
+### Useful Debugging Commands
+
+```python
+# Test pymonctl monitor detection
+import pymonctl
+monitors = pymonctl.getAllMonitors()
+for i, monitor in enumerate(monitors):
+    print(f"Monitor {i}: {monitor.name}")
+    print(f"  Position: {monitor.position}")
+    print(f"  Size: {monitor.size}")
+    print(f"  Work Area: {monitor.workArea}")
+
+# Test pyautogui screen detection  
+import pyautogui
+monitors = pyautogui.getAllMonitors()
+for i, monitor in enumerate(monitors):
+    left, top, width, height = monitor
+    print(f"Monitor {i}: ({left}, {top}) {width}x{height}")
+```
+
+### Coordinate System Validation
+
+When debugging positioning issues, test coordinates by calculating expected positions:
+
+```python
+# For a monitor with position (x, y) and size (width, height)
+# Quadrant corners would be at:
+top_left = (x, y)
+top_right = (x + width//2, y)
+bottom_left = (x, y + height//2)  
+bottom_right = (x + width//2, y + height//2)
+```
+
+### Common Debugging Scenarios
+
+- **Apps positioned on wrong monitor**: Usually indicates coordinate system mismatch between arrangement and positioning coordinates
+- **Apps clustered in corners**: May indicate missing corner alignment or incorrect window size detection
+- **Apps not moving at all**: Often due to accessibility permissions or incorrect PID detection
+
 ## Contributing
 
 If you want to contribute, here are some areas that could be improved:
