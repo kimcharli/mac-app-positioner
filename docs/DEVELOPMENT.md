@@ -110,3 +110,5 @@ If you want to contribute, here are some areas that could be improved:
 
 -   **GUI:** A simple GUI for managing profiles could make the tool more accessible to non-developers.
 -   **Error Handling:** The script could have more robust error handling for cases where applications are not running or windows are not found.
+
+For guidance on creating a native macOS application, see the [Native App Guide](NATIVE_APP_GUIDE.md).
