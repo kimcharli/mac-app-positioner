@@ -8,6 +8,23 @@ import sys
 import os
 import time
 from Cocoa import NSScreen, NSApplication, NSWorkspace
+
+# Enhanced monitor detection
+try:
+    import pymonctl
+    PYMONCTL_AVAILABLE = True
+    print("✅ pymonctl available - using enhanced monitor detection")
+except ImportError:
+    PYMONCTL_AVAILABLE = False
+    print("⚠️  pymonctl not available - using NSScreen fallback")
+
+try:
+    import pyautogui
+    PYAUTOGUI_AVAILABLE = True
+    print("✅ pyautogui available - positioning validation enabled")
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+    print("⚠️  pyautogui not available - no positioning validation")
 from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID
 from ApplicationServices import (
     AXUIElementCreateApplication, AXUIElementCopyAttributeNames,
@@ -23,6 +40,7 @@ class MacAppPositioner:
     def __init__(self, config_path="config.yaml"):
         self.config_path = config_path
         self.config = self.load_config()
+        self.coordinate_mappings = self.load_coordinate_mappings()
     
     def load_config(self):
         """Load configuration from YAML file"""
@@ -36,8 +54,87 @@ class MacAppPositioner:
             print(f"Error parsing configuration file: {e}")
             sys.exit(1)
     
-    def get_screens(self):
-        """Get information about connected screens"""
+    def load_coordinate_mappings(self):
+        """Load coordinate mappings for monitor positioning"""
+        # Default coordinate mappings based on our discoveries
+        return {
+            'SAMSUNG_3': {  # 4K monitor - coordinates depend on which display is main
+                'arrangement': (0, 1329),      # When MacBook is main
+                'positioning': (0, -2160),     # When MacBook is main (above MacBook)
+                'positioning_when_main': (0, 0),  # When Samsung is main (at origin)
+                'translation_rule': 'adaptive_based_on_main_display'
+            },
+            'Built-in Retina Display_1': {  # MacBook built-in
+                'arrangement': (0, 0),
+                'positioning': (0, 0),
+                'translation_rule': 'primary'
+            },
+            'LEN P24h-20_2': {  # Left monitor
+                'arrangement': (-2560, 969),
+                'positioning': (-2560, 969),
+                'translation_rule': 'left_of_primary'
+            }
+        }
+    
+    def get_screens_enhanced(self):
+        """Enhanced monitor detection using hybrid approach"""
+        if PYMONCTL_AVAILABLE:
+            return self.get_screens_pymonctl()
+        else:
+            print("Falling back to NSScreen detection")
+            return self.get_screens_nsscreen()
+    
+    def get_screens_pymonctl(self):
+        """Get monitor information using pymonctl (primary method)"""
+        try:
+            monitors = pymonctl.getAllMonitors()
+            screen_info = []
+            
+            for i, monitor in enumerate(monitors):
+                pos = monitor.position
+                size = monitor.size
+                
+                # Enhanced information from pymonctl
+                monitor_info = {
+                    'index': i,
+                    'name': monitor.name,
+                    'width': size.width,
+                    'height': size.height,
+                    'x': pos.x,
+                    'y': pos.y,
+                    'is_main': hasattr(monitor, 'isPrimary') and monitor.isPrimary,
+                    'work_area': getattr(monitor, 'workArea', None),
+                    'source': 'pymonctl'
+                }
+                
+                # Add coordinate translation if available
+                if monitor.name in self.coordinate_mappings:
+                    mapping = self.coordinate_mappings[monitor.name]
+                    
+                    # Use appropriate coordinates based on whether this monitor is main
+                    is_main = hasattr(monitor, 'isPrimary') and monitor.isPrimary
+                    if is_main and 'positioning_when_main' in mapping:
+                        monitor_info['positioning_coords'] = mapping['positioning_when_main']
+                        monitor_info['translation_rule'] = f"{mapping['translation_rule']}_as_main"
+                    else:
+                        monitor_info['positioning_coords'] = mapping['positioning']
+                        monitor_info['translation_rule'] = mapping['translation_rule']
+                else:
+                    # Default: same as arrangement coordinates
+                    monitor_info['positioning_coords'] = (pos.x, pos.y)
+                    monitor_info['translation_rule'] = 'unknown'
+                
+                screen_info.append(monitor_info)
+            
+            return screen_info
+            
+        except Exception as e:
+            print(f"Error with pymonctl detection: {e}")
+            print("Falling back to NSScreen detection")
+            return self.get_screens_nsscreen()
+    
+    def get_screens_nsscreen(self):
+        """Fallback monitor detection using NSScreen"""
         screens = NSScreen.screens()
         screen_info = []
         
@@ -45,14 +142,22 @@ class MacAppPositioner:
             frame = screen.frame()
             screen_info.append({
                 'index': i,
+                'name': f'Screen_{i}',  # NSScreen doesn't provide names
                 'width': int(frame.size.width),
                 'height': int(frame.size.height),
                 'x': int(frame.origin.x),
                 'y': int(frame.origin.y),
-                'is_main': screen == NSScreen.mainScreen()
+                'is_main': screen == NSScreen.mainScreen(),
+                'positioning_coords': (int(frame.origin.x), int(frame.origin.y)),  # Assume same as arrangement
+                'translation_rule': 'nsscreen_fallback',
+                'source': 'nsscreen'
             })
         
         return screen_info
+    
+    def get_screens(self):
+        """Get information about connected screens (legacy method for compatibility)"""
+        return self.get_screens_nsscreen()
     
     def get_running_applications(self):
         """Get list of running applications"""
@@ -89,27 +194,29 @@ class MacAppPositioner:
         return None
     
     def calculate_quadrant_positions(self, screen):
-        """Calculate quadrant positions for a screen"""
+        """Calculate quadrant positions for a screen using positioning coordinates"""
         width = screen['width']
         height = screen['height']
-        x_offset = screen['x']
-        y_offset = screen['y']
         
-        print(f"DEBUG: Screen bounds: x={x_offset}, y={y_offset}, width={width}, height={height}")
+        # Use positioning coordinates if available, otherwise fall back to arrangement coordinates
+        if 'positioning_coords' in screen and screen['positioning_coords']:
+            x_offset, y_offset = screen['positioning_coords']
+            coordinate_source = f"positioning ({screen.get('translation_rule', 'unknown')})"
+        else:
+            x_offset = screen['x']
+            y_offset = screen['y']
+            coordinate_source = "arrangement (fallback)"
         
-        # Use pure math-based positioning regardless of main display
-        # The coordinate system should work with any monitor as target
+        print(f"DEBUG: Using {coordinate_source} coordinates: x={x_offset}, y={y_offset}")
+        print(f"DEBUG: Screen bounds: width={width}, height={height}")
         
-        padding = 100
+        padding = 0  # Position at exact corners
         usable_width = width - (2 * padding)
         usable_height = height - (2 * padding)
         
         # Calculate quadrant dimensions
         quad_width = usable_width // 2
         quad_height = usable_height // 2
-        
-        # Use NSScreen coordinates directly - let's trust what the system reports
-        print(f"DEBUG: Using NSScreen coordinates directly: x={x_offset}, y={y_offset}")
         
         positions = {
             'top_left': {
@@ -156,8 +263,8 @@ class MacAppPositioner:
         print(f"Using profile: {profile_name}")
         profile = self.config['profiles'][profile_name]
         
-        # Get screen information
-        screens = self.get_screens()
+        # Get enhanced screen information
+        screens = self.get_screens_enhanced()
         
         # Find the screen that matches the configured primary resolution
         primary_monitor = next((m for m in profile['monitors'] if m['position'] == 'primary'), None)
@@ -168,14 +275,30 @@ class MacAppPositioner:
         primary_resolution = primary_monitor['resolution']
         main_screen = next((s for s in screens if f"{s['width']}x{s['height']}" == primary_resolution), None)
         
+        # Check if this screen is actually the main display for positioning
+        if main_screen and not main_screen.get('is_main', False):
+            print(f"⚠️  WARNING: Target screen ({primary_resolution}) is not the macOS main display")
+            print(f"   Windows may be constrained to the main display bounds")
+            print(f"   Consider setting the {main_screen.get('name', 'target monitor')} as main display in System Settings")
+        
         if not main_screen:
             print(f"Could not find screen with resolution {primary_resolution}")
             print("Available screens:")
             for screen in screens:
-                print(f"  {screen['width']}x{screen['height']} at ({screen['x']}, {screen['y']})")
+                source_info = f"[{screen.get('source', 'unknown')}]"
+                name_info = f"({screen.get('name', 'Unknown')})" if screen.get('name') else ""
+                print(f"  {screen['width']}x{screen['height']} at ({screen['x']}, {screen['y']}) {name_info} {source_info}")
             return False
         
-        print(f"Selected primary screen: {main_screen['width']}x{main_screen['height']} at ({main_screen['x']}, {main_screen['y']})")
+        source_info = f"[{main_screen.get('source', 'unknown')}]"
+        name_info = f"({main_screen.get('name', 'Unknown')})" if main_screen.get('name') else ""
+        print(f"Selected primary screen: {main_screen['width']}x{main_screen['height']} at ({main_screen['x']}, {main_screen['y']}) {name_info} {source_info}")
+        
+        # Show coordinate translation info
+        if 'positioning_coords' in main_screen:
+            pos_coords = main_screen['positioning_coords']
+            translation_rule = main_screen.get('translation_rule', 'unknown')
+            print(f"Positioning coordinates: ({pos_coords[0]}, {pos_coords[1]}) using rule: {translation_rule}")
         
         # Calculate quadrant positions
         quadrants = self.calculate_quadrant_positions(main_screen)
@@ -200,7 +323,15 @@ class MacAppPositioner:
                 # Get current position before moving
                 current_pos = self.get_window_position(target_app['pid'])
                 
-                if self.move_application_window(target_app['pid'], position):
+                # Validate coordinates with pyautogui before positioning
+                validation = self.validate_positioning_with_pyautogui(position['x'], position['y'])
+                if validation:
+                    if validation['precise']:
+                        print(f"✅ Coordinate validation: Target ({position['x']}, {position['y']}) is reachable")
+                    else:
+                        print(f"⚠️  Coordinate validation: Target may not be reachable - mouse diff: ({validation['x_diff']}, {validation['y_diff']})")
+                
+                if self.move_application_window(target_app['pid'], position, bundle_id):
                     # Wait a moment for the position to take effect
                     time.sleep(0.5)
                     
@@ -223,7 +354,9 @@ class MacAppPositioner:
                             print(f"        ❌ OFFSET: Position differs by ({x_diff}, {y_diff}) pixels")
                         
                         # Determine which monitor this position is on
-                        monitor_info = self.identify_monitor(final_pos['x'], final_pos['y'])
+                        # Prefer the target monitor (main_screen) in case of coordinate overlap
+                        preferred_monitor = main_screen.get('name', None)
+                        monitor_info = self.identify_monitor(final_pos['x'], final_pos['y'], preferred_monitor)
                         print(f"        Window is on: {monitor_info}")
                     else:
                         print(f"        Could not verify final position")
@@ -284,15 +417,27 @@ class MacAppPositioner:
             print(f"Error getting window position for PID {pid}: {e}")
             return None
     
-    def identify_monitor(self, x, y):
-        """Identify which monitor a coordinate is on"""
-        screens = self.get_screens()
+    def identify_monitor(self, x, y, prefer_monitor=None):
+        """Identify which monitor a coordinate is on using positioning coordinates
+        
+        Args:
+            x, y: Coordinates to check
+            prefer_monitor: Name of preferred monitor in case of overlap (e.g., 'SAMSUNG_3')
+        """
+        screens = self.get_screens_enhanced()
+        matches = []
         
         for i, screen in enumerate(screens):
-            screen_left = screen['x']
-            screen_right = screen['x'] + screen['width']
-            screen_top = screen['y']
-            screen_bottom = screen['y'] + screen['height']
+            # Use positioning coordinates if available, otherwise fall back to arrangement coordinates
+            if 'positioning_coords' in screen and screen['positioning_coords']:
+                screen_x, screen_y = screen['positioning_coords']
+            else:
+                screen_x, screen_y = screen['x'], screen['y']
+                
+            screen_left = screen_x
+            screen_right = screen_x + screen['width']
+            screen_top = screen_y
+            screen_bottom = screen_y + screen['height']
             
             if (screen_left <= x < screen_right and 
                 screen_top <= y < screen_bottom):
@@ -308,12 +453,62 @@ class MacAppPositioner:
                 elif screen['width'] == 2560 and screen['height'] == 1440:
                     monitor_type += " [2560x1440 External]"
                 
-                return f"Screen {i}: {screen['width']}x{screen['height']} at ({screen['x']}, {screen['y']}){monitor_type}"
+                source_info = f"[{screen.get('source', 'unknown')}]" if 'source' in screen else ""
+                name_info = f"({screen.get('name', 'Unknown')})" if screen.get('name') else ""
+                match_info = f"Monitor {i} {name_info} {source_info}: {screen['width']}x{screen['height']} at ({screen_x}, {screen_y}){monitor_type}"
+                
+                matches.append((screen, match_info))
+                
+                # If this is the preferred monitor, return immediately
+                if prefer_monitor and screen.get('name') == prefer_monitor:
+                    return match_info
         
+        # If we have matches but no preferred monitor match, return the first one
+        if matches:
+            return matches[0][1]
+            
         return "Unknown monitor"
     
-    def move_application_window(self, pid, position):
-        """Move application window to specified position using accessibility APIs"""
+    def validate_positioning_with_pyautogui(self, target_x, target_y):
+        """Validate positioning coordinates using pyautogui mouse positioning"""
+        if not PYAUTOGUI_AVAILABLE:
+            return None
+        
+        try:
+            # Get original mouse position
+            original_pos = pyautogui.position()
+            
+            # Test if we can move mouse to target coordinates
+            pyautogui.moveTo(target_x, target_y, duration=0.1)
+            validation_pos = pyautogui.position()
+            
+            # Restore original mouse position
+            pyautogui.moveTo(original_pos.x, original_pos.y, duration=0.1)
+            
+            # Check if mouse positioning worked
+            x_diff = abs(validation_pos.x - target_x)
+            y_diff = abs(validation_pos.y - target_y)
+            
+            return {
+                'target': (target_x, target_y),
+                'actual': (validation_pos.x, validation_pos.y),
+                'x_diff': x_diff,
+                'y_diff': y_diff,
+                'precise': x_diff <= 5 and y_diff <= 5
+            }
+            
+        except Exception as e:
+            print(f"Error validating coordinates with pyautogui: {e}")
+            return None
+    
+    def move_application_window(self, pid, position, app_bundle_id=None):
+        """Move application window to specified position using accessibility APIs
+        
+        Implementation Details:
+        - Uses first window only for apps with multiple windows (Chrome, etc.)
+        - Chrome-specific: Multiple positioning attempts with timing variations
+        - Other apps: Standard single positioning attempt
+        """
         if not self.check_accessibility_permissions():
             print("❌ Accessibility permissions not granted!")
             print("Please grant accessibility permissions:")
@@ -328,56 +523,169 @@ class MacAppPositioner:
                 print(f"No windows found for PID {pid}")
                 return False
             
-            # Use the first window (main window)
+            # Use the first window (main window) - Chrome may have multiple
             window = windows[0]
+            print(f"Using first window (of {len(windows)} available)")
             
             # First, bring the window to front
             AXUIElementPerformAction(window, kAXRaiseAction)
             time.sleep(0.1)
             
-            # Direct positioning - let's trust the math and coordinates
-            new_position = (float(position['x']), float(position['y']))
-            position_value = AXValueCreate(kAXValueCGPointType, new_position)
-            
-            print(f"Attempting to move window to final position: ({position['x']}, {position['y']})")
-            
-            # TEST: Check if we're trying to use negative coordinates (which might not work)
-            if position['y'] < 0:
-                print(f"WARNING: Attempting to use negative Y coordinate ({position['y']}) - this may not work")
-            
-            # Set the final position
-            pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
-            
-            if pos_result == 0:
-                print(f"✅ Position command accepted for PID {pid}")
-                
-                # Wait a moment then try to resize
-                time.sleep(0.2)
-                
-                # Now try to resize
-                new_size = (float(position['width']), float(position['height']))
-                size_value = AXValueCreate(kAXValueCGSizeType, new_size)
-                size_result = AXUIElementSetAttributeValue(window, kAXSizeAttribute, size_value)
-                
-                if size_result != 0:
-                    print(f"⚠️  Size command rejected (code: {size_result}) but position may have worked")
-                
-                return True
+            # Chrome-specific positioning strategy
+            if app_bundle_id == 'com.google.Chrome':
+                return self._move_chrome_window(window, position, pid)
             else:
-                print(f"❌ Position command rejected for PID {pid} (code: {pos_result})")
-                return False
+                return self._move_standard_window(window, position, pid)
                 
         except Exception as e:
             print(f"❌ Error positioning window for PID {pid}: {e}")
             return False
     
+    def _move_standard_window(self, window, position, pid):
+        """Standard window positioning for most applications"""
+        new_position = (float(position['x']), float(position['y']))
+        position_value = AXValueCreate(kAXValueCGPointType, new_position)
+        
+        print(f"Attempting to move window to final position: ({position['x']}, {position['y']})")
+        
+        # Set the position
+        pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
+        
+        if pos_result == 0:
+            print(f"✅ Position command accepted for PID {pid}")
+            
+            # Wait a moment then try to resize
+            time.sleep(0.2)
+            
+            # Now try to resize
+            new_size = (float(position['width']), float(position['height']))
+            size_value = AXValueCreate(kAXValueCGSizeType, new_size)
+            size_result = AXUIElementSetAttributeValue(window, kAXSizeAttribute, size_value)
+            
+            if size_result != 0:
+                print(f"⚠️  Size command rejected (code: {size_result}) but position may have worked")
+            
+            return True
+        else:
+            print(f"❌ Position command rejected for PID {pid} (code: {pos_result})")
+            return False
+    
+    def _move_chrome_window(self, window, position, pid):
+        """Chrome-specific positioning with multiple strategies
+        
+        Chrome has internal window management that can override system positioning.
+        Strategy: Multiple attempts with different timings and coordinate adjustments.
+        """
+        target_x, target_y = float(position['x']), float(position['y'])
+        target_width, target_height = float(position['width']), float(position['height'])
+        
+        print(f"🔄 Chrome detected - using multi-attempt positioning strategy")
+        print(f"Target: ({target_x}, {target_y}) {target_width}x{target_height}")
+        
+        # Strategy 1: Direct positioning (same as other apps)
+        print("Strategy 1: Direct positioning")
+        position_value = AXValueCreate(kAXValueCGPointType, (target_x, target_y))
+        pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
+        
+        if pos_result == 0:
+            time.sleep(0.3)  # Chrome needs more time
+            actual_pos = self.get_window_position(pid)
+            if actual_pos:
+                x_diff = abs(actual_pos['x'] - target_x)
+                y_diff = abs(actual_pos['y'] - target_y)
+                if x_diff <= 10 and y_diff <= 10:  # Allow 10px tolerance
+                    print(f"✅ Chrome positioned successfully on first attempt")
+                    self._resize_window(window, target_width, target_height)
+                    return True
+                else:
+                    print(f"⚠️  Chrome offset detected: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
+        
+        # Strategy 2: Multiple positioning attempts with delays
+        print("Strategy 2: Multiple attempts with delays")
+        for attempt in range(3):
+            time.sleep(0.2 * (attempt + 1))  # Increasing delays
+            pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
+            if pos_result == 0:
+                time.sleep(0.4)
+                actual_pos = self.get_window_position(pid)
+                if actual_pos:
+                    x_diff = abs(actual_pos['x'] - target_x)
+                    y_diff = abs(actual_pos['y'] - target_y)
+                    if x_diff <= 10 and y_diff <= 10:
+                        print(f"✅ Chrome positioned successfully on attempt {attempt + 2}")
+                        self._resize_window(window, target_width, target_height)
+                        return True
+        
+        # Strategy 3: Coordinate adjustment based on observed offset pattern
+        print("Strategy 3: Coordinate adjustment for Chrome offset pattern")
+        # DISABLED: The hardcoded adjustments are causing incorrect positioning
+        # Previous adjustments were based on wrong coordinate system
+        print("⚠️  Strategy 3 disabled - hardcoded offsets were incorrect")
+        return False  # Skip this strategy
+        
+        adjusted_position_value = AXValueCreate(kAXValueCGPointType, (adjusted_x, adjusted_y))
+        pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, adjusted_position_value)
+        
+        if pos_result == 0:
+            time.sleep(0.5)
+            actual_pos = self.get_window_position(pid)
+            if actual_pos:
+                x_diff = abs(actual_pos['x'] - target_x)
+                y_diff = abs(actual_pos['y'] - target_y)
+                if x_diff <= 20 and y_diff <= 20:  # More tolerance for adjusted coordinates
+                    print(f"✅ Chrome positioned successfully with coordinate adjustment")
+                    self._resize_window(window, target_width, target_height)
+                    return True
+                else:
+                    print(f"⚠️  Chrome still offset after adjustment: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
+        
+        print(f"⚠️  Chrome positioning partially successful - window moved but with offset")
+        self._resize_window(window, target_width, target_height)
+        return True  # Consider partial success as success
+    
+    def _resize_window(self, window, width, height):
+        """Helper method to resize window"""
+        new_size = (width, height)
+        size_value = AXValueCreate(kAXValueCGSizeType, new_size)
+        size_result = AXUIElementSetAttributeValue(window, kAXSizeAttribute, size_value)
+        
+        if size_result != 0:
+            print(f"⚠️  Size command rejected (code: {size_result})")
+    
     def list_screens(self):
         """List all connected screens with their properties"""
         screens = self.get_screens()
-        print("Connected screens:")
+        print("Connected screens (legacy NSScreen):")
         for screen in screens:
             main_indicator = " (main)" if screen['is_main'] else ""
             print(f"  Screen {screen['index']}: {screen['width']}x{screen['height']} at ({screen['x']}, {screen['y']}){main_indicator}")
+    
+    def list_screens_enhanced(self):
+        """List all connected screens with enhanced information"""
+        screens = self.get_screens_enhanced()
+        print("Enhanced monitor detection:")
+        for screen in screens:
+            main_indicator = " (primary)" if screen['is_main'] else ""
+            source_info = f"[{screen.get('source', 'unknown')}]"
+            name_info = f"({screen.get('name', 'Unknown')})" if screen.get('name') else ""
+            
+            print(f"\n  Monitor {screen['index']} {name_info} {source_info}{main_indicator}")
+            print(f"    Resolution: {screen['width']}x{screen['height']}")
+            print(f"    Arrangement coords: ({screen['x']}, {screen['y']})")
+            
+            if 'positioning_coords' in screen:
+                pos_coords = screen['positioning_coords']
+                translation_rule = screen.get('translation_rule', 'unknown')
+                print(f"    Positioning coords: ({pos_coords[0]}, {pos_coords[1]}) [{translation_rule}]")
+            
+            if screen.get('work_area'):
+                work_area = screen['work_area']
+                print(f"    Work area: {work_area}")
+                
+        # Show coordinate mappings
+        print(f"\nCoordinate mappings loaded:")
+        for name, mapping in self.coordinate_mappings.items():
+            print(f"  {name}: {mapping['arrangement']} → {mapping['positioning']} [{mapping['translation_rule']}]")
     
     def list_applications(self):
         """List running applications"""
@@ -525,6 +833,8 @@ def main():
         
         if command == "list-screens":
             positioner.list_screens()
+        elif command == "list-screens-enhanced":
+            positioner.list_screens_enhanced()
         elif command == "list-apps":
             positioner.list_applications()
         elif command == "detect":
@@ -579,11 +889,12 @@ def main():
     else:
         print("Mac App Positioner")
         print("Commands:")
-        print("  list-screens     - List connected screens")
-        print("  list-apps        - List running applications") 
-        print("  detect           - Detect current profile")
-        print("  position         - Position applications automatically")
-        print("  position <profile> - Position applications using specific profile")
+        print("  list-screens            - List connected screens (NSScreen)")
+        print("  list-screens-enhanced   - List screens with enhanced detection (pymonctl)")
+        print("  list-apps               - List running applications") 
+        print("  detect                  - Detect current profile")
+        print("  position                - Position applications automatically")
+        print("  position <profile>      - Position applications using specific profile")
         print("")
         print("Configuration:")
         print("  generate-config <profile> - Show suggested config for current setup")
