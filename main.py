@@ -13,18 +13,14 @@ from Cocoa import NSScreen, NSApplication, NSWorkspace
 try:
     import pymonctl
     PYMONCTL_AVAILABLE = True
-    print("✅ pymonctl available - using enhanced monitor detection")
 except ImportError:
     PYMONCTL_AVAILABLE = False
-    print("⚠️  pymonctl not available - using NSScreen fallback")
 
 try:
     import pyautogui
     PYAUTOGUI_AVAILABLE = True
-    print("✅ pyautogui available - positioning validation enabled")
 except ImportError:
     PYAUTOGUI_AVAILABLE = False
-    print("⚠️  pyautogui not available - no positioning validation")
 from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID
 from ApplicationServices import (
     AXUIElementCreateApplication, AXUIElementCopyAttributeNames,
@@ -37,10 +33,29 @@ from ApplicationServices import (
 
 
 class MacAppPositioner:
-    def __init__(self, config_path="config.yaml"):
+    def __init__(self, config_path="config.yaml", verbose=False):
         self.config_path = config_path
+        self.verbose = verbose
+        
+        # Show library availability only in verbose mode
+        if verbose:
+            if PYMONCTL_AVAILABLE:
+                print("✅ pymonctl available - using enhanced monitor detection")
+            else:
+                print("⚠️  pymonctl not available - using NSScreen fallback")
+            
+            if PYAUTOGUI_AVAILABLE:
+                print("✅ pyautogui available - positioning validation enabled")
+            else:
+                print("⚠️  pyautogui not available - no positioning validation")
+        
         self.config = self.load_config()
         self.coordinate_mappings = self.load_coordinate_mappings()
+    
+    def print_verbose(self, message):
+        """Print message only if verbose mode is enabled"""
+        if self.verbose:
+            print(message)
     
     def load_config(self):
         """Load configuration from YAML file"""
@@ -207,8 +222,8 @@ class MacAppPositioner:
             y_offset = screen['y']
             coordinate_source = "arrangement (fallback)"
         
-        print(f"DEBUG: Using {coordinate_source} coordinates: x={x_offset}, y={y_offset}")
-        print(f"DEBUG: Screen bounds: width={width}, height={height}")
+        self.print_verbose(f"DEBUG: Using {coordinate_source} coordinates: x={x_offset}, y={y_offset}")
+        self.print_verbose(f"DEBUG: Screen bounds: width={width}, height={height}")
         
         padding = 0  # Position at exact corners
         usable_width = width - (2 * padding)
@@ -245,9 +260,9 @@ class MacAppPositioner:
             }
         }
         
-        print("DEBUG: Calculated positions:")
+        self.print_verbose("DEBUG: Calculated positions:")
         for name, pos in positions.items():
-            print(f"  {name}: ({pos['x']}, {pos['y']}) -> ends at ({pos['x'] + pos['width']}, {pos['y'] + pos['height']})")
+            self.print_verbose(f"  {name}: ({pos['x']}, {pos['y']}) -> ends at ({pos['x'] + pos['width']}, {pos['y'] + pos['height']})")
             
         return positions
     
@@ -280,9 +295,9 @@ class MacAppPositioner:
         
         # Check if this screen is actually the main display for positioning
         if main_screen and not main_screen.get('is_main', False):
-            print(f"⚠️  WARNING: Target screen ({primary_resolution}) is not the macOS main display")
-            print(f"   Windows may be constrained to the main display bounds")
-            print(f"   Consider setting the {main_screen.get('name', 'target monitor')} as main display in System Settings")
+            self.print_verbose(f"⚠️  WARNING: Target screen ({primary_resolution}) is not the macOS main display")
+            self.print_verbose(f"   Windows may be constrained to the main display bounds")
+            self.print_verbose(f"   Consider setting the {main_screen.get('name', 'target monitor')} as main display in System Settings")
         
         if not main_screen:
             print(f"Could not find screen with resolution {primary_resolution}")
@@ -301,13 +316,13 @@ class MacAppPositioner:
         if 'positioning_coords' in main_screen:
             pos_coords = main_screen['positioning_coords']
             translation_rule = main_screen.get('translation_rule', 'unknown')
-            print(f"Positioning coordinates: ({pos_coords[0]}, {pos_coords[1]}) using rule: {translation_rule}")
+            self.print_verbose(f"Positioning coordinates: ({pos_coords[0]}, {pos_coords[1]}) using rule: {translation_rule}")
         
         # Calculate quadrant positions
         quadrants = self.calculate_quadrant_positions(main_screen)
-        print("Quadrant positions:")
+        self.print_verbose("Quadrant positions:")
         for quad_name, quad_pos in quadrants.items():
-            print(f"  {quad_name}: ({quad_pos['x']}, {quad_pos['y']}) {quad_pos['width']}x{quad_pos['height']}")
+            self.print_verbose(f"  {quad_name}: ({quad_pos['x']}, {quad_pos['y']}) {quad_pos['width']}x{quad_pos['height']}")
         
         # Get running applications
         running_apps = self.get_running_applications()
@@ -327,9 +342,9 @@ class MacAppPositioner:
                 current_pos = self.get_window_position(target_app['pid'])
                 
                 # Skip coordinate validation during positioning for speed
-                print(f"✅ Coordinate validation: Target ({position['x']}, {position['y']}) is reachable")
+                self.print_verbose(f"✅ Coordinate validation: Target ({position['x']}, {position['y']}) is reachable")
                 
-                if self.move_application_window(target_app['pid'], position, bundle_id):
+                if self.move_application_window(target_app['pid'], position, bundle_id, target_app['name'], quadrant):
                     # Minimal wait for position to take effect
                     time.sleep(0.1)
                     
@@ -337,25 +352,25 @@ class MacAppPositioner:
                     final_pos = self.get_window_position(target_app['pid'])
                     
                     if current_pos:
-                        print(f"Before: {target_app['name']} at ({current_pos['x']}, {current_pos['y']})")
+                        self.print_verbose(f"Before: {target_app['name']} at ({current_pos['x']}, {current_pos['y']})")
                     
                     if final_pos:
-                        print(f"Target: {target_app['name']} should be at ({position['x']}, {position['y']})")
-                        print(f"Actual: {target_app['name']} ended up at ({final_pos['x']}, {final_pos['y']}) -> {quadrant}")
+                        self.print_verbose(f"Target: {target_app['name']} should be at ({position['x']}, {position['y']})")
+                        self.print_verbose(f"Actual: {target_app['name']} ended up at ({final_pos['x']}, {final_pos['y']}) -> {quadrant}")
                         
                         # Check if position matches what we requested
                         x_diff = abs(final_pos['x'] - position['x'])
                         y_diff = abs(final_pos['y'] - position['y'])
                         if x_diff <= 5 and y_diff <= 5:  # Allow 5 pixel tolerance
-                            print(f"        ✅ PRECISE: Position matches target within 5px tolerance")
+                            self.print_verbose(f"        ✅ PRECISE: Position matches target within 5px tolerance")
                         else:
-                            print(f"        ❌ OFFSET: Position differs by ({x_diff}, {y_diff}) pixels")
+                            self.print_verbose(f"        ❌ OFFSET: Position differs by ({x_diff}, {y_diff}) pixels")
                         
                         # Determine which monitor this position is on
                         # Prefer the target monitor (main_screen) in case of coordinate overlap
                         preferred_monitor = main_screen.get('name', None)
                         monitor_info = self.identify_monitor(final_pos['x'], final_pos['y'], preferred_monitor)
-                        print(f"        Window is on: {monitor_info}")
+                        self.print_verbose(f"        Window is on: {monitor_info}")
                     else:
                         print(f"        Could not verify final position")
                     
@@ -500,7 +515,88 @@ class MacAppPositioner:
             print(f"Error validating coordinates with pyautogui: {e}")
             return None
     
-    def move_application_window(self, pid, position, app_bundle_id=None):
+    def get_window_size(self, pid):
+        """Get window size for the specified PID"""
+        try:
+            app = AXUIElementCreateApplication(pid)
+            error_code, windows = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute, None)
+            
+            if error_code == 0 and windows:
+                window = windows[0]  # Use first window
+                error_code, size_value = AXUIElementCopyAttributeValue(window, kAXSizeAttribute, None)
+                if error_code == 0:
+                    size = AXValueGetValue(size_value, kAXValueCGSizeType, None)[1]
+                    return {'width': int(size.width), 'height': int(size.height)}
+            
+        except Exception as e:
+            print(f"Error getting window size for PID {pid}: {e}")
+        
+        return None
+    
+    def calculate_corner_aligned_position(self, quadrant_position, window_size, quadrant):
+        """Calculate corner-aligned position based on quadrant and window size"""
+        if not window_size:
+            return quadrant_position  # Fallback to original position
+        
+        x = quadrant_position['x']
+        y = quadrant_position['y'] 
+        quad_width = quadrant_position['width']
+        quad_height = quadrant_position['height']
+        
+        if quadrant == 'top_left':
+            # Already aligned to top-left corner
+            aligned_x, aligned_y = x, y
+        elif quadrant == 'top_right':
+            # Align to top-right corner of quadrant
+            aligned_x = x + quad_width - window_size['width']
+            aligned_y = y
+        elif quadrant == 'bottom_left':
+            # Align to bottom-left corner of quadrant  
+            aligned_x = x
+            aligned_y = y + quad_height - window_size['height']
+        elif quadrant == 'bottom_right':
+            # Align to bottom-right corner of quadrant
+            aligned_x = x + quad_width - window_size['width'] 
+            aligned_y = y + quad_height - window_size['height']
+        else:
+            # Unknown quadrant, use original position
+            aligned_x, aligned_y = x, y
+            
+        return {'x': aligned_x, 'y': aligned_y}
+    
+    def calculate_simple_corner_alignment(self, quadrant_position, quadrant):
+        """Simple corner alignment using estimated small window sizes"""
+        x = quadrant_position['x']
+        y = quadrant_position['y'] 
+        quad_width = quadrant_position['width']
+        quad_height = quadrant_position['height']
+        
+        # Estimate small window size (good for apps like KakaoTalk)
+        estimated_small_width = 300
+        estimated_small_height = 400
+        
+        if quadrant == 'top_left':
+            # Already aligned to top-left corner
+            aligned_x, aligned_y = x, y
+        elif quadrant == 'top_right':
+            # Align to top-right corner of quadrant
+            aligned_x = x + quad_width - estimated_small_width
+            aligned_y = y
+        elif quadrant == 'bottom_left':
+            # Align to bottom-left corner of quadrant  
+            aligned_x = x
+            aligned_y = y + quad_height - estimated_small_height
+        elif quadrant == 'bottom_right':
+            # Align to bottom-right corner of quadrant
+            aligned_x = x + quad_width - estimated_small_width
+            aligned_y = y + quad_height - estimated_small_height
+        else:
+            # Unknown quadrant, use original position
+            aligned_x, aligned_y = x, y
+            
+        return {'x': aligned_x, 'y': aligned_y}
+    
+    def move_application_window(self, pid, position, app_bundle_id=None, app_name=None, quadrant=None):
         """Move application window to specified position using accessibility APIs
         
         Implementation Details:
@@ -524,65 +620,84 @@ class MacAppPositioner:
             
             # Use the first window (main window) - Chrome may have multiple
             window = windows[0]
-            print(f"Using first window (of {len(windows)} available)")
+            self.print_verbose(f"Using first window (of {len(windows)} available)")
             
             # First, bring the window to front
             AXUIElementPerformAction(window, kAXRaiseAction)
             time.sleep(0.05)  # Minimal delay
             
+            # Get current window size for corner alignment
+            window_size = None
+            if quadrant:
+                window_size = self.get_window_size(pid)
+                self.print_verbose(f"DEBUG: Got window size for {quadrant}: {window_size}")
+            
+            # Calculate corner-aligned position using actual window size
+            if quadrant and window_size:
+                aligned_position = self.calculate_corner_aligned_position(position, window_size, quadrant)
+                self.print_verbose(f"Corner alignment: {quadrant} adjusted position from ({position['x']}, {position['y']}) to ({aligned_position['x']}, {aligned_position['y']})")
+            else:
+                # Fallback to simple corner alignment if size detection fails
+                if quadrant:
+                    aligned_position = self.calculate_simple_corner_alignment(position, quadrant)
+                    self.print_verbose(f"Fallback corner alignment: {quadrant} adjusted position from ({position['x']}, {position['y']}) to ({aligned_position['x']}, {aligned_position['y']})")
+                else:
+                    aligned_position = position
+            
             # Chrome-specific positioning strategy
             if app_bundle_id == 'com.google.Chrome':
-                return self._move_chrome_window(window, position, pid)
+                return self._move_chrome_window(window, aligned_position, pid, app_name)
             else:
-                return self._move_standard_window(window, position, pid)
+                return self._move_standard_window(window, aligned_position, pid, app_name)
                 
         except Exception as e:
             print(f"❌ Error positioning window for PID {pid}: {e}")
             return False
     
-    def _move_standard_window(self, window, position, pid):
+    def _move_standard_window(self, window, aligned_position, pid, app_name=None):
         """Standard window positioning for most applications"""
-        new_position = (float(position['x']), float(position['y']))
+        new_position = (float(aligned_position['x']), float(aligned_position['y']))
         position_value = AXValueCreate(kAXValueCGPointType, new_position)
         
-        print(f"Attempting to move window to final position: ({position['x']}, {position['y']})")
+        if app_name:
+            print(f"Positioning {app_name}...")
+        else:
+            print(f"Attempting to move window to final position: ({aligned_position['x']}, {aligned_position['y']})")
         
         # Set the position
         pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
         
         if pos_result == 0:
-            print(f"✅ Position command accepted for PID {pid}")
+            if app_name:
+                print(f"✅ {app_name} positioned successfully")
+            else:
+                print(f"✅ Position command accepted for PID {pid}")
             
-            # Minimal wait before resize
-            time.sleep(0.05)
-            
-            # Now try to resize
-            new_size = (float(position['width']), float(position['height']))
-            size_value = AXValueCreate(kAXValueCGSizeType, new_size)
-            size_result = AXUIElementSetAttributeValue(window, kAXSizeAttribute, size_value)
-            
-            if size_result != 0:
-                print(f"⚠️  Size command rejected (code: {size_result}) but position may have worked")
+            # Skip resizing - let apps maintain their natural size
             
             return True
         else:
             print(f"❌ Position command rejected for PID {pid} (code: {pos_result})")
             return False
     
-    def _move_chrome_window(self, window, position, pid):
+    def _move_chrome_window(self, window, aligned_position, pid, app_name=None):
         """Chrome-specific positioning with multiple strategies
         
         Chrome has internal window management that can override system positioning.
         Strategy: Multiple attempts with different timings and coordinate adjustments.
         """
-        target_x, target_y = float(position['x']), float(position['y'])
-        target_width, target_height = float(position['width']), float(position['height'])
+        target_x, target_y = float(aligned_position['x']), float(aligned_position['y'])
+        # Note: We don't use width/height for resizing anymore, but keep for compatibility
+        target_width, target_height = 0, 0  # Not used since we removed resizing
         
-        print(f"🔄 Chrome detected - using multi-attempt positioning strategy")
-        print(f"Target: ({target_x}, {target_y}) {target_width}x{target_height}")
+        if app_name:
+            print(f"Positioning {app_name}...")
+        
+        self.print_verbose(f"🔄 Chrome detected - using multi-attempt positioning strategy")
+        self.print_verbose(f"Target: ({target_x}, {target_y}) {target_width}x{target_height}")
         
         # Strategy 1: Direct positioning (same as other apps)
-        print("Strategy 1: Direct positioning")
+        self.print_verbose("Strategy 1: Direct positioning")
         position_value = AXValueCreate(kAXValueCGPointType, (target_x, target_y))
         pos_result = AXUIElementSetAttributeValue(window, kAXPositionAttribute, position_value)
         
@@ -593,11 +708,13 @@ class MacAppPositioner:
                 x_diff = abs(actual_pos['x'] - target_x)
                 y_diff = abs(actual_pos['y'] - target_y)
                 if x_diff <= 25 and y_diff <= 25:  # Accept larger tolerance for speed
-                    print(f"✅ Chrome positioned successfully with {x_diff}px/{y_diff}px offset")
-                    self._resize_window(window, target_width, target_height)
+                    if app_name:
+                        print(f"✅ {app_name} positioned successfully")
+                    self.print_verbose(f"✅ Chrome positioned successfully with {x_diff}px/{y_diff}px offset")
+                    # Skip resizing - let Chrome maintain its natural size
                     return True
                 else:
-                    print(f"⚠️  Chrome offset detected: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
+                    self.print_verbose(f"⚠️  Chrome offset detected: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
         
         # Strategy 2: Skip multiple attempts - not needed with correct coordinates
         print("Strategy 2: Skipped - direct positioning should work with correct coordinates")
@@ -619,8 +736,11 @@ class MacAppPositioner:
                 x_diff = abs(actual_pos['x'] - target_x)
                 y_diff = abs(actual_pos['y'] - target_y)
                 if x_diff <= 20 and y_diff <= 20:  # More tolerance for adjusted coordinates
-                    print(f"✅ Chrome positioned successfully with coordinate adjustment")
-                    self._resize_window(window, target_width, target_height)
+                    if app_name:
+                        print(f"✅ {app_name} positioned successfully")
+                    else:
+                        print(f"✅ Chrome positioned successfully with coordinate adjustment")
+                    # Skip resizing - let Chrome maintain its natural size
                     return True
                 else:
                     print(f"⚠️  Chrome still offset after adjustment: actual ({actual_pos['x']}, {actual_pos['y']}) vs target ({target_x}, {target_y})")
@@ -812,10 +932,17 @@ class MacAppPositioner:
 
 
 def main():
-    positioner = MacAppPositioner()
+    # Check for --verbose flag
+    verbose = False
+    args = sys.argv[1:]
+    if "--verbose" in args:
+        verbose = True
+        args.remove("--verbose")
     
-    if len(sys.argv) > 1:
-        command = sys.argv[1]
+    positioner = MacAppPositioner(verbose=verbose)
+    
+    if len(args) > 0:
+        command = args[0]
         
         if command == "list-screens":
             positioner.list_screens()
@@ -827,28 +954,28 @@ def main():
             profile = positioner.detect_profile()
             print(f"Detected profile: {profile or 'None'}")
         elif command == "position":
-            profile = sys.argv[2] if len(sys.argv) > 2 else None
+            profile = args[1] if len(args) > 1 else None
             positioner.position_applications(profile)
         elif command == "update-profile":
-            if len(sys.argv) < 3:
+            if len(args) < 2:
                 print("Usage: update-profile <profile-name>")
                 print("Example: update-profile home")
             else:
-                profile_name = sys.argv[2]
+                profile_name = args[1]
                 positioner.update_profile_interactive(profile_name)
         elif command == "quick-update":
-            if len(sys.argv) < 3:
+            if len(args) < 2:
                 print("Usage: quick-update <profile-name>")
                 print("Example: quick-update home")
             else:
-                profile_name = sys.argv[2]
+                profile_name = args[1]
                 positioner.quick_update_profile(profile_name)
         elif command == "generate-config":
-            if len(sys.argv) < 3:
+            if len(args) < 2:
                 print("Usage: generate-config <profile-name>")
                 print("Example: generate-config home")
             else:
-                profile_name = sys.argv[2]
+                profile_name = args[1]
                 positioner.generate_profile_config(profile_name)
         elif command == "check-permissions":
             if positioner.check_accessibility_permissions():
@@ -887,6 +1014,9 @@ def main():
         print("  update-profile <profile>  - Interactively update profile with current setup") 
         print("  quick-update <profile>    - Quickly update profile (no confirmation)")
         print("  check-permissions         - Check if accessibility permissions are granted")
+        print("")
+        print("Options:")
+        print("  --verbose                 - Show detailed debugging information and positioning details")
 
 
 if __name__ == "__main__":

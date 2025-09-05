@@ -16,7 +16,13 @@ You can run all commands using `uv run`.
 
     # Position apps using a specific profile
     uv run position home
+
+    # Show detailed debugging information during positioning
+    uv run position --verbose
     ```
+
+    **Options:**
+    - `--verbose`: Show detailed debugging information including coordinate calculations, window sizes, and positioning details
 
 -   **`detect`**
 
@@ -112,3 +118,23 @@ Use the `list-apps` command to find the bundle identifiers for your running appl
 ```bash
 uv run list-apps
 ```
+
+## Application Positioning Behavior
+
+### Corner Alignment
+
+The Mac App Positioner intelligently aligns applications within their designated quadrants based on their actual window sizes:
+
+- **Large applications** (like Chrome, Teams, Outlook): These typically fill most or all of their quadrant space
+- **Small applications** (like KakaoTalk): These are aligned to the appropriate corner of their quadrant:
+  - `top_left`: Application's top-left corner aligns to quadrant's top-left corner
+  - `top_right`: Application's top-right corner aligns to quadrant's top-right corner  
+  - `bottom_left`: Application's bottom-left corner aligns to quadrant's bottom-left corner
+  - `bottom_right`: Application's bottom-right corner aligns to quadrant's bottom-right corner
+
+### Window Size Preservation
+
+Applications maintain their natural/preferred window sizes rather than being forced to fill entire quadrants. This ensures:
+- Small utility apps like KakaoTalk remain compact and usable
+- Large apps like browsers can use their optimal dimensions
+- Better overall user experience with appropriately sized windows
