@@ -2,88 +2,31 @@
 
 A Python utility to automatically position macOS applications across multiple monitors based on predefined configurations.
 
-## Setup
+## Quick Start
 
-1. **Create and activate virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
+1.  **Install dependencies:**
+    ```bash
+    uv sync
+    ```
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+2.  **Run the positioner:**
+    ```bash
+    uv run position
+    ```
+    This will detect your current monitor setup and position applications based on the matching profile in `config.yaml`.
 
-## Usage
+## Documentation
 
-### Basic Commands
+For more detailed information, please refer to the following documents:
 
-**List connected screens:**
-```bash
-python main.py list-screens
-```
+*   **[Usage Guide](./docs/USAGE.md):** Detailed instructions on CLI commands and configuration.
+*   **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md):** Solutions for common issues, especially related to monitor coordinates.
+*   **[Architecture](./docs/ARCHITECTURE.md):** An explanation of the technical design and decisions.
+*   **[Development Guide](./docs/DEVELOPMENT.md):** Information for contributors.
 
-**List running applications:**
-```bash
-python main.py list-apps
-```
+## Permissions
 
-**Detect current monitor profile:**
-```bash
-python main.py detect
-```
+This utility requires **Accessibility** permissions to control application windows.
 
-**Position applications automatically:**
-```bash
-python main.py position
-```
-
-**Position using specific profile:**
-```bash
-python main.py position home
-python main.py position office
-```
-
-## Configuration
-
-Edit `config.yaml` to customize:
-- Monitor configurations for home/office setups
-- Application positioning (quadrants on main screen)
-- Bundle identifiers for target applications
-
-## Current Status
-
-✅ Basic framework implemented  
-✅ Screen detection working  
-✅ Application enumeration working  
-✅ Profile detection working  
-✅ Position calculation working  
-🚧 **Window positioning (placeholder only - requires implementation)**  
-
-### What Works Now
-- Detects your monitor configuration automatically
-- Finds running applications (Chrome, Outlook, Teams, etc.)
-- Calculates perfect quadrant positions for your main screen
-- Shows exactly where each app would be positioned
-
-### What's Missing
-The `move_application_window()` function in main.py currently only prints position information as placeholders. **Actual window positioning is not implemented yet.**
-
-## Next Steps
-
-1. **Implement actual window positioning using accessibility APIs** (main missing piece)
-2. Add error handling for missing applications
-3. Test with actual multi-monitor setups
-4. Add automatic trigger on monitor changes
-
-## Permissions Required
-
-**For full functionality, you'll need to grant:**
-- **Accessibility** permissions for window control
-- **Screen Recording** permissions (if needed for certain window operations)
-
-**How to grant permissions:**
-System Preferences > Privacy & Security > Accessibility > Add your terminal app or Python
-
-**Current Limitation:** Even with permissions granted, the window positioning code needs to be implemented using macOS accessibility APIs (PyObjC AX framework or AppleScript integration).
+-   You can check your permissions with `uv run check-permissions`.
+-   If not granted, you will need to add your terminal application or Python interpreter in `System Settings > Privacy & Security > Accessibility`.
