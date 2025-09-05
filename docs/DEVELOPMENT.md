@@ -25,23 +25,28 @@ This project uses `uv` for Python environment and dependency management.
     You can run the script using `uv run`:
 
     ```bash
-    uv run main.py <command>
-    # or simply
-    uv run <command>
+    uv run positioner <command>
     ```
 
     For example:
     ```bash
-    uv run position
-    uv run list-screens-enhanced
+    uv run positioner position
+    uv run positioner list-screens-enhanced
     ```
 
 ## Project Structure
 
--   **`main.py`**: The main entry point of the application. It contains all the logic for monitor detection, application positioning, and the CLI.
+-   **`mac_app_positioner/`**: The main application package.
+    -   **`__main__.py`**: The main entry point for the command-line script.
+    -   **`display.py`**: Manages monitor detection and coordinate systems.
+    -   **`application.py`**: Manages application-related tasks.
+    -   **`config.py`**: Handles loading the configuration file.
+    -   **`profiles.py`**: Manages profile detection and application layout.
+-   **`main.py`**: A simple script in the root directory that allows running the application directly with `python main.py`. While not strictly necessary after the creation of the `positioner` script, it is kept for developer convenience.
 -   **`config.yaml`**: The user-facing configuration file for defining profiles and layouts.
 -   **`pyproject.toml`**: Defines project metadata and dependencies for `uv`.
 -   **`docs/`**: Contains all the project documentation.
+-   **`tests/`**: Contains the test suite.
 
 ## Development Philosophy
 
@@ -103,6 +108,5 @@ bottom_right = (x + width//2, y + height//2)
 
 If you want to contribute, here are some areas that could be improved:
 
--   **Automatic Coordinate Detection:** The `coordinate_mappings` in `main.py` are currently hardcoded. A more advanced version of this tool could attempt to automatically discover the correct positioning coordinates.
 -   **GUI:** A simple GUI for managing profiles could make the tool more accessible to non-developers.
 -   **Error Handling:** The script could have more robust error handling for cases where applications are not running or windows are not found.

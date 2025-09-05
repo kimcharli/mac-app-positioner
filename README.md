@@ -11,7 +11,7 @@ A Python utility to automatically position macOS applications across multiple mo
 
 2.  **Run the positioner:**
     ```bash
-    uv run position
+    uv run positioner position
     ```
     This will detect your current monitor setup and position applications based on the matching profile in `config.yaml`.
 
@@ -28,5 +28,5 @@ For more detailed information, please refer to the following documents:
 
 This utility requires **Accessibility** permissions to control application windows.
 
--   You can check your permissions with `uv run check-permissions`.
+-   You can check your permissions with `uv run positioner check-permissions`.
 -   If not granted, you will need to add your terminal application or Python interpreter in `System Settings > Privacy & Security > Accessibility`.

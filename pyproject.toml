@@ -13,5 +13,10 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 
+[project.scripts]
+positioner = "mac_app_positioner.__main__:main"
+
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = [
+    "pytest>=8.2.2"
+]

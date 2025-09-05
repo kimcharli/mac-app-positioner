@@ -6,7 +6,12 @@ layout:
     bottom_left: com.microsoft.Outlook
     bottom_right: com.kakao.KakaoTalkMac
   builtin:
-  - md.obsidian
+    - md.obsidian
+
+# Application-specific settings
+applications:
+  com.google.Chrome:
+    positioning_strategy: "chrome"
 
 # Monitor configurations for different setups
 profiles:
@@ -16,7 +21,7 @@ profiles:
       position: primary
     - resolution: 2560x1440
       position: left
-    - resolution: 2056x1329
+    - resolution: "builtin"
       position: builtin
   office:
     monitors:
@@ -24,5 +29,5 @@ profiles:
       position: primary
     - resolution: 2560x1440
       position: left
-    - resolution: macbook
+    - resolution: "builtin"
       position: builtin

@@ -24,7 +24,7 @@ The script needs to use the **Positioning Coordinates** to work correctly.
     First, make sure the script has the required permissions.
 
     ```bash
-    uv run check-permissions
+    uv run positioner check-permissions
     ```
 
     If permissions are not granted, follow the instructions to grant them in `System Settings > Privacy & Security > Accessibility`.
@@ -34,7 +34,7 @@ The script needs to use the **Positioning Coordinates** to work correctly.
     Use the `list-screens-enhanced` command to see how the script detects your monitors.
 
     ```bash
-    uv run list-screens-enhanced
+    uv run positioner list-screens-enhanced
     ```
 
     Look for the **Positioning coords** for your main monitor. If your main external monitor is physically located **above** your MacBook, you should see negative Y values for its positioning coordinates.
@@ -48,24 +48,9 @@ The script needs to use the **Positioning Coordinates** to work correctly.
     ```
     In this example, the arrangement coordinates `(0, 1329)` are misleading. The correct positioning coordinates `(0, -2160)` are being used, which is why it works.
 
-3.  **Verify the Adaptive Coordinate System**
+3.  **Verify the Dynamic Coordinate Conversion**
 
-    The script has a built-in "adaptive coordinate system" defined in `main.py` inside the `load_coordinate_mappings` function. This system contains the correct positioning coordinates for common monitor setups.
-
-    ```python
-    # in main.py
-    def load_coordinate_mappings(self):
-        return {
-            'SAMSUNG_3': {  # 4K monitor
-                'positioning': (0, -2160),     # When MacBook is main
-                'positioning_when_main': (0, 0),  # When Samsung is main
-                # ...
-            },
-            # ...
-        }
-    ```
-
-    If your monitor is not positioning correctly, you may need to add or edit an entry for it here. Use the name from `list-screens-enhanced` as the key.
+    The script automatically converts arrangement coordinates to positioning coordinates. If the positioning coordinates in the output of `list-screens-enhanced` do not seem to match the physical layout of your monitors, there might be an issue with the conversion logic. Refer to the `ARCHITECTURE.md` document for a detailed explanation of the coordinate system conversion.
 
 ## Problem: A specific application (like Chrome) is slightly off-center.
 
@@ -76,6 +61,6 @@ The script needs to use the **Positioning Coordinates** to work correctly.
 
 -   **Cause:** The resolutions in your `config.yaml` for the profile do not match the resolutions of your connected monitors.
 -   **Solution:**
-    1.  Run `uv run list-screens-enhanced` to see the exact resolutions of your monitors.
+    1.  Run `uv run positioner list-screens-enhanced` to see the exact resolutions of your monitors.
     2.  Compare this with the resolutions in your `config.yaml` under the profile you expect to be detected.
-    3.  For a quick fix, run `uv run quick-update <profile-name>` to automatically update the profile with your current monitor setup.
+    3.  For a quick fix, run `uv run positioner quick-update <profile-name>` to automatically update the profile with your current monitor setup.

@@ -4,7 +4,7 @@ This guide provides detailed instructions on how to use and configure the Mac Ap
 
 ## CLI Commands
 
-You can run all commands using `uv run`.
+You can run all commands using `uv run positioner`.
 
 -   **`position [profile]`**
 
@@ -12,13 +12,13 @@ You can run all commands using `uv run`.
 
     ```bash
     # Automatically detect profile and position apps
-    uv run position
+    uv run positioner position
 
     # Position apps using a specific profile
-    uv run position home
+    uv run positioner position home
 
     # Show detailed debugging information during positioning
-    uv run position --verbose
+    uv run positioner position --verbose
     ```
 
     **Options:**
@@ -29,7 +29,7 @@ You can run all commands using `uv run`.
     Detects and displays the monitor profile that matches your current setup.
 
     ```bash
-    uv run detect
+    uv run positioner detect
     ```
 
 -   **`list-screens-enhanced`**
@@ -37,7 +37,7 @@ You can run all commands using `uv run`.
     Lists all connected monitors with detailed information, including names and both arrangement and positioning coordinates. This is very useful for debugging.
 
     ```bash
-    uv run list-screens-enhanced
+    uv run positioner list-screens-enhanced
     ```
 
 -   **`list-apps`**
@@ -45,7 +45,7 @@ You can run all commands using `uv run`.
     Lists all currently running applications and their bundle identifiers.
 
     ```bash
-    uv run list-apps
+    uv run positioner list-apps
     ```
 
 -   **`check-permissions`**
@@ -53,7 +53,7 @@ You can run all commands using `uv run`.
     Checks if the necessary Accessibility permissions have been granted.
 
     ```bash
-    uv run check-permissions
+    uv run positioner check-permissions
     ```
 
 -   **`quick-update <profile>`**
@@ -61,7 +61,7 @@ You can run all commands using `uv run`.
     Updates the specified profile in `config.yaml` with your current monitor setup. This is a quick way to configure the tool.
 
     ```bash
-    uv run quick-update home
+    uv run positioner quick-update home
     ```
 
 ## Configuration (`config.yaml`)
